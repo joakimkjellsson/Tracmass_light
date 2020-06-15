@@ -213,7 +213,7 @@ MODULE mod_grid
                                                bioDataDir, bioPrefixForm, topoDataDir
   CHARACTER(LEN=50), DIMENSION(20)          :: physTracerNames, bioTracerNames
 
-  CHARACTER (LEN=23)                        :: Project, Case
+  CHARACTER (LEN=60)                        :: Project, Case
   CHARACTER (LEN=200)                       :: projdir="", ormdir=""
 
   LOGICAL                                   :: l_onestep = .FALSE.

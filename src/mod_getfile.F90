@@ -19,8 +19,80 @@ MODULE mod_getfile
   INTEGER                                    :: ierr, varid,ncid
 
   CONTAINS
-
-
+  
+  FUNCTION filledFileName(filePattern, currYear, currMon, currDay, currDmax, currHour, currMin, currSec)
+  ! --------------------------------------------------
+  !
+  ! Purpose:
+  ! Take filepattern and fill in year, month, day etc.
+  !
+  ! --------------------------------------------------
+  
+      CHARACTER (len=*)                       :: filePattern
+      CHARACTER (len=LEN(filePattern))        :: filledFileName
+      CHARACTER (len=8)                       :: timestamp_yyyymmdd
+      
+      INTEGER                                 :: currYear, currMon, currDay 
+      INTEGER, OPTIONAL                       :: currDmax, currHour, currMin, currSec
+      INTEGER                                 :: ichar
+      
+      filledFileName = filePattern
+      PRINT*,"filledFileName: 1, ",filledFileName
+      
+      WRITE(timestamp_yyyymmdd(1:4),'(i4)') currYear
+      WRITE(timestamp_yyyymmdd(5:6),'(i2)') currMon
+      WRITE(timestamp_yyyymmdd(7:8),'(i2)') currDay 
+           
+      ichar = INDEX(filledFileName,'YYYY')
+      DO WHILE (ichar /= 0)
+          WRITE(filledFileName(ichar:ichar+3),'(i4)') currYear
+          ichar = INDEX(filledFileName,'YYYY')
+      END DO
+      PRINT*,"filledFileName: 2, ",filledFileName
+      
+      ichar = INDEX(filledFileName,'MM')
+      DO WHILE (ichar /= 0)
+          WRITE(filledFileName(ichar:ichar+1),'(i2.2)') currMon
+          ichar = INDEX(filledFileName,'MM')
+      END DO
+      PRINT*,"filledFileName: 3, ",filledFileName
+      
+      ichar = INDEX(filledFileName,'DD')
+      DO WHILE (ichar /= 0)
+          write(filledFileName(ichar:ichar+1),'(i2.2)') currDay
+          ichar = INDEX(filledFileName,'DD')
+      END DO
+      PRINT*,"filledFileName: 4, ",filledFileName 
+      
+      ichar = INDEX(filledFileName,'TSTSTSTS')
+      DO WHILE (ichar /= 0)
+          filledFileName = trim(filledFileName(:ichar-1))//trim(timestamp_yyyymmdd)//trim(filledFileName(ichar+8:))
+          ichar = INDEX(filledFileName,'TSTSTSTS')
+      END DO
+      PRINT*,"filledFileName: 5, ",filledFileName
+      
+      ichar = INDEX(filledFileName,'RUNID')
+      DO WHILE (ichar /= 0)
+          filledFileName = trim(filledFileName(:ichar-1))//trim(RunID)//trim(filledFileName(ichar+5:))
+          ichar = INDEX(filledFileName,'RUNID')
+      END DO
+      PRINT*,"filledFileName: 6, ",filledFileName
+      
+  END FUNCTION
+  
+  FUNCTION nferr(ierr,index)
+      
+      INTEGER                                 :: ierr, index
+      CHARACTER (len=100)                     :: nferr
+      
+      IF(ierr .NE. 0) THEN
+          PRINT*,NF90_STRERROR(ierr)
+          STOP 
+      ENDIF
+      
+  END FUNCTION
+  
+  
   FUNCTION get2DfieldNC(fieldFile ,varName, start2D, count2D, cextend)
   ! --------------------------------------------------
   !
@@ -46,30 +118,53 @@ MODULE mod_getfile
       ELSE
             ALLOCATE(get2DfieldNC(1:imt, 1:jmt))
       END IF
-
+      
+      IF (log_level >= 2) THEN
+          PRINT*,"get2DfieldNC: ",TRIM(fieldFile)
+          PRINT*,"get2DfieldNC: start2D, count2D", start2D, count2D
+          PRINT*,"get2DfieldNC: size(field,1), size(field,2) ", size(field,1), size(field,2)
+      ENDIF
+      
       ierr=NF90_OPEN(TRIM(fieldFile) ,NF90_NOWRITE ,ncid)
-      IF(ierr .NE. 0) STOP 1
-      ierr=NF90_INQ_VARID(ncid ,varName ,varid)
-      IF(ierr .NE. 0) STOP 2
+      IF (ierr .NE. 0) PRINT*,nferr(ierr,1)
+
+      ierr=NF90_INQ_VARID(ncid ,varName ,varid)      
+      IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
 
       IF ( (l_subdom) .AND. (imindom > imaxdom) ) THEN
+          
+          IF (log_level >= 5) PRINT*,"get2DfieldNC: subdomain crosses end of grid"
           start2D(1) = imindom; count2D(1) = imthalf1
           ierr=NF90_GET_VAR(ncid ,varid ,field(1:imthalf1,:), start2D, count2D )
+          IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
+          
           start2D(1) = 1; count2D(1) = imthalf2
           ierr=NF90_GET_VAR(ncid ,varid ,field(imthalf1+1:imt,:), start2D, count2D )
+          IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
+ 
       ELSE
+          
+          IF (log_level >= 5) PRINT*,"get2DfieldNC: ncid, varid, start2D, count2D",ncid, varid, start2D, count2D
           ierr=NF90_GET_VAR(ncid ,varid ,field, start2D, count2D )
-          IF(ierr .NE. 0) STOP 3
+          IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
+          
       END IF
 
       ierr = NF90_GET_ATT(ncid, varid,"scale_factor", scale_factor)
+      IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
       IF(ierr .NE. 0) scale_factor = 1.0
+      
       ierr = NF90_GET_ATT(ncid, varid,"add_offset", add_offset)
+      IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
       IF(ierr .NE. 0) add_offset = 0.0
-
+      
       ierr=NF90_CLOSE(ncid)
+      IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
       IF(ierr .NE. 0) STOP 4
-
+      
+      IF (log_level >= 5) THEN
+         PRINT*,"get2DfieldNC: put read data in array ",size(field,1),size(field,2),size(get2DfieldNC,1),size(get2DfieldNC,2)
+      ENDIF
       get2DfieldNC(:,:) = field(:,:)*scale_factor + add_offset
 
    END FUNCTION get2DfieldNC
@@ -124,45 +219,70 @@ MODULE mod_getfile
        END IF
 
        ierr=NF90_OPEN(TRIM(fieldFile), NF90_NOWRITE, ncid)
-       IF(ierr .NE. 0) STOP TRIM(fieldFile)
+       IF(ierr .NE. 0) THEN
+             PRINT*,"get3DfieldNC: fieldFile: TRIM(fieldFile)"
+             IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
+       END IF
+       
        ierr=NF90_INQ_VARID(ncid, varName, varid)
+       IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
        IF(ierr .NE. 0) STOP 2
+       
        IF ( (l_subdom) .AND. (imindom > imaxdom) ) THEN
 
            IF (stcase == 'st') THEN
               ss(1) = imindom; cc(1) = imthalf1
               ierr=NF90_GET_VAR(ncid, varid, field(1:imthalf1,:,:), ss, cc)
+              IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
               ss(1) = 1; cc(1) = imthalf2
               ierr=NF90_GET_VAR(ncid ,varid ,field(imthalf1+1:imt,:,:), ss, cc )
+              IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
+              
            ELSE IF (stcase == 'st_r') THEN
               ss(3) = imindom; cc(3) = imthalf1
               ierr=NF90_GET_VAR(ncid, varid, field(:,:,1:imtdom), ss, cc)
+              IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
               ss(3) = 1; cc(3) = imthalf2
               ierr=NF90_GET_VAR(ncid ,varid ,field(:,:,imtdom+1:imt), ss, cc )
+              IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
+              
            ELSE IF (stcase == 'ts') THEN
               ss(2) = imindom; cc(2) = imthalf1
               ierr=NF90_GET_VAR(ncid, varid, field4(:,1:imthalf1,:,:), ss, cc)
+              IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
               ss(2) = 1; cc(2) = imthalf2
               ierr=NF90_GET_VAR(ncid ,varid ,field4(:,imthalf1+1:imt,:,:), ss, cc )
+              IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
+
            ELSE IF (stcase == 'ts_r') THEN
              ss(4) = imindom; cc(4) = imthalf1
              ierr=NF90_GET_VAR(ncid, varid, field4(:,:,:,1:imthalf1), ss, cc)
+             IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
              ss(4) = 1; cc(4) = imthalf2
              ierr=NF90_GET_VAR(ncid ,varid ,field4(:,:,:,imthalf1+1:imt), ss, cc )
+             IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
+             
            END IF
            IF(ierr .NE. 0) STOP 3
+           IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
+           
        ELSE
+           
            IF (stcase == 'st' .OR. stcase == 'st_r') ierr=NF90_GET_VAR(ncid, varid, field, ss, cc)
            IF (stcase == 'ts' .OR. stcase == 'ts_r') ierr=NF90_GET_VAR(ncid, varid, field4, ss, cc)
-           IF(ierr .NE. 0) STOP 3
+           IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
+           
        END IF
 
        ierr = NF90_GET_ATT(ncid, varid,"scale_factor", scale_factor)
+       IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
        IF(ierr .NE. 0) scale_factor = 1.0
        ierr = NF90_GET_ATT(ncid, varid,"add_offset", add_offset)
+       IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
        IF(ierr .NE. 0) add_offset = 0.0
 
        ierr=NF90_CLOSE(ncid)
+       IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
        IF(ierr .NE. 0) STOP 4
 
        IF (stcase == 'st') THEN

@@ -1,16 +1,16 @@
 # Project and case definition
-PROJECT	          = Theoretical
-CASE              = Theoretical
-RUNFILE 	        = runtracmass
-NETCDFLIBS        =
+PROJECT	          = NEMO
+CASE              = nemo_orca0083-n06_jasmin
+RUNFILE 	  = runtracmass
+NETCDFLIBS        = "automatic-44"
 #================================================================
 
 # Read the project Makefile
-PROJMAKE           := $(wildcard projects/$(PROJECT)/Makefile.prj)
-CASEMAKE           := $(wildcard projects/$(PROJECT)/Makefile.prj)
+PROJMAKE           := $(wildcard projects/$(CASE)/Makefile.prj)
+CASEMAKE           := $(wildcard projects/$(CASE)/Makefile.prj)
 
 ifneq ($(strip $(CASEMAKE)),)
-include projects/$(PROJECT)/Makefile.prj
+include projects/$(CASE)/Makefile.prj
 else
 ifneq ($(strip $(PROJMAKE)),)
 include projects/$(PROJECT)/Makefile.prj
@@ -46,19 +46,26 @@ endif
 
 # Fortran compiler and flags
 FC = gfortran
-FF = -g -O3 -fbacktrace -fbounds-check -Wall -Wno-unused-dummy-argument
+
+ifeq ($(FC),"gfortran")
+FF = -g -O3 -fbacktrace -fbounds-check -Wall -x f95-cpp-input
+else ifeq ($(FC),"ifort")
+FF = -g -traceback -O3 -CB 
+else
+FF = -g -O3 -fbacktrace -fbounds-check -Wall 
+endif
 
 # Path to sources
-VPATH = src:projects/$(PROJECT)
+VPATH = src:projects/$(CASE)
 
 all: runfile
 
 ifneq ($(strip $(CASE)),)
-	cp projects/$(PROJECT)/namelist_$(CASE).in namelist.in
-else
-ifneq ($(strip $(PROJECT)),)
-	cp projects/$(PROJECT)/namelist_$(PROJECT).in namelist.in
-endif
+	cp projects/$(CASE)/namelist_$(PROJECT).in namelist.in
+#else
+#ifneq ($(strip $(PROJECT)),)
+#	cp projects/$(PROJECT)/namelist_$(PROJECT).in namelist.in
+#endif
 endif
 
 
