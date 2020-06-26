@@ -36,53 +36,54 @@ MODULE mod_getfile
       INTEGER, OPTIONAL                       :: currDmax, currHour, currMin, currSec
       INTEGER                                 :: ichar
       
-      filledFileName = filePattern
-      PRINT*,"filledFileName: 1, ",filledFileName
+      filledFileName = filePattern      
       
+      ! make a time step in format YYYYMMDD 
+      ! sometimes this is used
       WRITE(timestamp_yyyymmdd(1:4),'(i4)') currYear
       WRITE(timestamp_yyyymmdd(5:6),'(i2)') currMon
       WRITE(timestamp_yyyymmdd(7:8),'(i2)') currDay 
-           
+      
+      ! for every YYYY, replace with currYear
       ichar = INDEX(filledFileName,'YYYY')
       DO WHILE (ichar /= 0)
           WRITE(filledFileName(ichar:ichar+3),'(i4)') currYear
           ichar = INDEX(filledFileName,'YYYY')
       END DO
-      PRINT*,"filledFileName: 2, ",filledFileName
       
+      ! for every MM, replace with currMon
       ichar = INDEX(filledFileName,'MM')
       DO WHILE (ichar /= 0)
           WRITE(filledFileName(ichar:ichar+1),'(i2.2)') currMon
           ichar = INDEX(filledFileName,'MM')
       END DO
-      PRINT*,"filledFileName: 3, ",filledFileName
       
+      ! for every DD, replace with currDay
       ichar = INDEX(filledFileName,'DD')
       DO WHILE (ichar /= 0)
           write(filledFileName(ichar:ichar+1),'(i2.2)') currDay
           ichar = INDEX(filledFileName,'DD')
       END DO
-      PRINT*,"filledFileName: 4, ",filledFileName 
       
+      ! for every TSTSTSTS, replace with timestamp YYYYMMDD
       ichar = INDEX(filledFileName,'TSTSTSTS')
       DO WHILE (ichar /= 0)
           filledFileName = trim(filledFileName(:ichar-1))//trim(timestamp_yyyymmdd)//trim(filledFileName(ichar+8:))
           ichar = INDEX(filledFileName,'TSTSTSTS')
       END DO
-      PRINT*,"filledFileName: 5, ",filledFileName
       
+      ! replace RUNID with RunID from namelist
       ichar = INDEX(filledFileName,'RUNID')
       DO WHILE (ichar /= 0)
           filledFileName = trim(filledFileName(:ichar-1))//trim(RunID)//trim(filledFileName(ichar+5:))
           ichar = INDEX(filledFileName,'RUNID')
       END DO
-      PRINT*,"filledFileName: 6, ",filledFileName
       
   END FUNCTION
   
   FUNCTION nferr(ierr,index)
       
-      INTEGER                                 :: ierr, index
+      INTEGER                                 :: ierr,index
       CHARACTER (len=100)                     :: nferr
       
       IF(ierr .NE. 0) THEN
@@ -119,17 +120,17 @@ MODULE mod_getfile
             ALLOCATE(get2DfieldNC(1:imt, 1:jmt))
       END IF
       
-      IF (log_level >= 2) THEN
-          PRINT*,"get2DfieldNC: ",TRIM(fieldFile)
-          PRINT*,"get2DfieldNC: start2D, count2D", start2D, count2D
-          PRINT*,"get2DfieldNC: size(field,1), size(field,2) ", size(field,1), size(field,2)
+      IF (log_level >= 3) THEN
+          PRINT*," get2DfieldNC: ",TRIM(fieldFile)
+          PRINT*," get2DfieldNC: start2D, count2D", start2D, count2D
+          PRINT*," get2DfieldNC: size(field,1), size(field,2) ", size(field,1), size(field,2)
       ENDIF
       
-      ierr=NF90_OPEN(TRIM(fieldFile) ,NF90_NOWRITE ,ncid)
-      IF (ierr .NE. 0) PRINT*,nferr(ierr,1)
-
-      ierr=NF90_INQ_VARID(ncid ,varName ,varid)      
-      IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
+      IF (log_level >= 5) PRINT*,' get2DfieldNC: open ',TRIM(fieldFile)
+      CALL err( NF90_OPEN(TRIM(fieldFile) ,NF90_NOWRITE ,ncid) )
+      
+      IF (log_level >= 5) PRINT*,' get2DfieldNC: inquire ',TRIM(varName)
+      CALL err( NF90_INQ_VARID(ncid ,varName ,varid) )
 
       IF ( (l_subdom) .AND. (imindom > imaxdom) ) THEN
           
@@ -149,18 +150,23 @@ MODULE mod_getfile
           IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
           
       END IF
-
-      ierr = NF90_GET_ATT(ncid, varid,"scale_factor", scale_factor)
-      IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
-      IF(ierr .NE. 0) scale_factor = 1.0
       
-      ierr = NF90_GET_ATT(ncid, varid,"add_offset", add_offset)
-      IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
-      IF(ierr .NE. 0) add_offset = 0.0
+      IF (log_level >= 5) PRINT*,' get2DfieldNC: get_att scale_factor'
+      ierr = NF90_GET_ATT(ncid, varid,"scale_factor", scale_factor) 
+      IF (ierr .NE. 0) THEN
+          IF (log_level >= 3) PRINT*,"get2DfieldNC: scale factor not found. set to 1.0" 
+          scale_factor = 1.0
+      END IF
       
-      ierr=NF90_CLOSE(ncid)
-      IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
-      IF(ierr .NE. 0) STOP 4
+      IF (log_level >= 5) PRINT*,' get2DfieldNC: get_att add_offset '
+      ierr = NF90_GET_ATT(ncid, varid,"add_offset", add_offset)      
+      IF (ierr .NE. 0) THEN
+          IF (log_level >= 3) PRINT*,"get2DfieldNC: add_offset not found. set to 0.0"
+          add_offset = 0.0
+      END IF
+      
+      IF (log_level >= 5) PRINT*,' get2DfieldNC: close '
+      CALL err( NF90_CLOSE(ncid) )
       
       IF (log_level >= 5) THEN
          PRINT*,"get2DfieldNC: put read data in array ",size(field,1),size(field,2),size(get2DfieldNC,1),size(get2DfieldNC,2)
@@ -217,16 +223,18 @@ MODULE mod_getfile
        ELSE
              ALLOCATE(get3DfieldNC(1:imt, 1:jmt, 1:km))
        END IF
-
-       ierr=NF90_OPEN(TRIM(fieldFile), NF90_NOWRITE, ncid)
-       IF(ierr .NE. 0) THEN
-             PRINT*,"get3DfieldNC: fieldFile: TRIM(fieldFile)"
-             IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
-       END IF
        
-       ierr=NF90_INQ_VARID(ncid, varName, varid)
-       IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
-       IF(ierr .NE. 0) STOP 2
+       IF (log_level >= 5) PRINT*," get3DfieldNC open ",TRIM(fieldFile)
+       CALL err( NF90_OPEN(TRIM(fieldFile), NF90_NOWRITE, ncid) )
+       !IF(ierr .NE. 0) THEN
+       !      PRINT*,"get3DfieldNC: fieldFile: TRIM(fieldFile)"
+       !      IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
+       !END IF
+       
+       IF (log_level >= 5) PRINT*," get3DfieldNC inquire varid ",varName
+       CALL err( NF90_INQ_VARID(ncid, varName, varid) )
+       !IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
+       !IF(ierr .NE. 0) STOP 2
        
        IF ( (l_subdom) .AND. (imindom > imaxdom) ) THEN
 
@@ -275,15 +283,19 @@ MODULE mod_getfile
        END IF
 
        ierr = NF90_GET_ATT(ncid, varid,"scale_factor", scale_factor)
-       IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
-       IF(ierr .NE. 0) scale_factor = 1.0
+       IF (ierr .NE. 0) THEN 
+           IF (log_level >= 3) PRINT*," get3DfieldNC: scale_factor not found. set to 1.0 "
+           scale_factor = 1.0
+       END IF
        ierr = NF90_GET_ATT(ncid, varid,"add_offset", add_offset)
-       IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
-       IF(ierr .NE. 0) add_offset = 0.0
-
-       ierr=NF90_CLOSE(ncid)
-       IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
-       IF(ierr .NE. 0) STOP 4
+       IF (ierr .NE. 0) THEN 
+           IF (log_level >= 3) PRINT*," get3DfieldNC: add_offset not found. set to 0.0"
+           add_offset = 0.0
+       END IF
+       
+       CALL err( NF90_CLOSE(ncid) )
+       !IF (ierr .NE. 0) PRINT*,nferr(ierr,2)
+       !IF(ierr .NE. 0) STOP 4
 
        IF (stcase == 'st') THEN
           get3DfieldNC(:,:,:) = field(:,:,:)*scale_factor + add_offset
@@ -299,6 +311,18 @@ MODULE mod_getfile
        END IF
 
     end function get3DfieldNC
+    
+    
+    SUBROUTINE err(ierr)
+    
+        INTEGER :: ierr
+        
+        IF( ierr /= 0) THEN
+            PRINT*, NF90_STRERROR(ierr)
+            STOP
+        END IF
+    
+    END SUBROUTINE   
 
 #endif
 END MODULE mod_getfile

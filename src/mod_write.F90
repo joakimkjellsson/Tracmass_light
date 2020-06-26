@@ -58,7 +58,9 @@ MODULE mod_write
     ! --------------------------------------------------
 
         fullWritePref =  TRIM(outDataDir)//TRIM(outDataFile)
-
+        ! Call mkdir to create directory if it does not exist
+        call system('mkdir -p ' // trim(outDataDir))
+        
         OPEN(UNIT=50, FILE = TRIM(fullWritePref)//'_ini.csv', STATUS='replace')
         IF (l_psi .EQV..FALSE.) OPEN(UNIT=51, FILE = TRIM(fullWritePref)//'_run.csv', STATUS='replace')
         OPEN(UNIT=52, FILE = TRIM(fullWritePref)//'_out.csv', STATUS='replace')

@@ -9,7 +9,8 @@ docs/_templates
 # Build objects and modules
 *.mod
 *.o
-
+runtracmass
+namelist.in
 
 # ---------- TO ERASE LATER --------------
 
